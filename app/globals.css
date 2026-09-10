@@ -24,3 +24,400 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+/* =========================================================
+   SIGMANIX PREMIUM ANIMATED LOGIN BACKGROUND
+   ========================================================= */
+
+.sigmanix-login-bg {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+
+  background:
+    radial-gradient(
+      circle at 15% 20%,
+      rgba(14, 165, 233, 0.45),
+      transparent 35%
+    ),
+    radial-gradient(
+      circle at 85% 75%,
+      rgba(37, 99, 235, 0.55),
+      transparent 40%
+    ),
+    linear-gradient(
+      135deg,
+      #031a4a 0%,
+      #073b8f 35%,
+      #0969c7 65%,
+      #0ea5e9 100%
+    );
+
+  background-size: 140% 140%;
+
+  animation:
+    sigmanixBackgroundShift 14s ease-in-out infinite alternate;
+}
+
+
+/* =========================================================
+   LARGE AURORA GLOW - TOP LEFT
+   ========================================================= */
+
+.sigmanix-login-bg::before {
+  content: "";
+
+  position: absolute;
+
+  width: 700px;
+  height: 700px;
+
+  top: -420px;
+  left: -300px;
+
+  border-radius: 50%;
+
+  background:
+    radial-gradient(
+      circle,
+      rgba(103, 232, 249, 0.8) 0%,
+      rgba(14, 165, 233, 0.45) 25%,
+      rgba(37, 99, 235, 0.2) 50%,
+      transparent 72%
+    );
+
+  filter: blur(45px);
+
+  opacity: 0.9;
+
+  animation:
+    sigmanixAuroraOne 12s ease-in-out infinite alternate;
+
+  pointer-events: none;
+
+  z-index: -3;
+}
+
+
+/* =========================================================
+   LARGE AURORA GLOW - BOTTOM RIGHT
+   ========================================================= */
+
+.sigmanix-login-bg::after {
+  content: "";
+
+  position: absolute;
+
+  width: 750px;
+  height: 750px;
+
+  right: -350px;
+  bottom: -430px;
+
+  border-radius: 50%;
+
+  background:
+    radial-gradient(
+      circle,
+      rgba(34, 211, 238, 0.7) 0%,
+      rgba(59, 130, 246, 0.45) 30%,
+      rgba(29, 78, 216, 0.2) 52%,
+      transparent 72%
+    );
+
+  filter: blur(50px);
+
+  opacity: 0.9;
+
+  animation:
+    sigmanixAuroraTwo 15s ease-in-out infinite alternate;
+
+  pointer-events: none;
+
+  z-index: -3;
+}
+
+
+/* =========================================================
+   PARTICLE CONTAINER
+   ========================================================= */
+
+.sigmanix-login-bg > .absolute {
+  overflow: hidden;
+}
+
+
+/* =========================================================
+   GLOWING PARTICLES
+   ========================================================= */
+
+.sigmanix-particle {
+  position: absolute;
+
+  display: block;
+
+  border-radius: 999px;
+
+  background: rgba(186, 230, 253, 0.95);
+
+  box-shadow:
+    0 0 6px rgba(125, 211, 252, 1),
+    0 0 15px rgba(56, 189, 248, 0.9),
+    0 0 30px rgba(14, 165, 233, 0.5);
+
+  pointer-events: none;
+
+  animation:
+    sigmanixParticleFloat linear infinite;
+}
+
+
+/* Particle 1 */
+
+.sigmanix-particle:nth-child(1) {
+  width: 5px;
+  height: 5px;
+
+  left: 8%;
+  bottom: -30px;
+
+  animation-duration: 13s;
+}
+
+
+/* Particle 2 */
+
+.sigmanix-particle:nth-child(2) {
+  width: 8px;
+  height: 8px;
+
+  left: 20%;
+  bottom: -30px;
+
+  animation-duration: 17s;
+  animation-delay: -6s;
+}
+
+
+/* Particle 3 */
+
+.sigmanix-particle:nth-child(3) {
+  width: 4px;
+  height: 4px;
+
+  left: 38%;
+  bottom: -30px;
+
+  animation-duration: 12s;
+  animation-delay: -3s;
+}
+
+
+/* Particle 4 */
+
+.sigmanix-particle:nth-child(4) {
+  width: 7px;
+  height: 7px;
+
+  left: 61%;
+  bottom: -30px;
+
+  animation-duration: 18s;
+  animation-delay: -8s;
+}
+
+
+/* Particle 5 */
+
+.sigmanix-particle:nth-child(5) {
+  width: 5px;
+  height: 5px;
+
+  left: 78%;
+  bottom: -30px;
+
+  animation-duration: 14s;
+  animation-delay: -5s;
+}
+
+
+/* Particle 6 */
+
+.sigmanix-particle:nth-child(6) {
+  width: 9px;
+  height: 9px;
+
+  left: 91%;
+  bottom: -30px;
+
+  animation-duration: 19s;
+  animation-delay: -10s;
+}
+
+
+/* =========================================================
+   ANIMATIONS
+   ========================================================= */
+
+
+/* Slow moving gradient */
+
+@keyframes sigmanixBackgroundShift {
+
+  0% {
+    background-position:
+      0% 30%;
+  }
+
+  50% {
+    background-position:
+      60% 70%;
+  }
+
+  100% {
+    background-position:
+      100% 40%;
+  }
+}
+
+
+/* Top aurora */
+
+@keyframes sigmanixAuroraOne {
+
+  0% {
+    transform:
+      translate3d(0, 0, 0)
+      scale(1);
+  }
+
+  50% {
+    transform:
+      translate3d(180px, 120px, 0)
+      scale(1.18);
+  }
+
+  100% {
+    transform:
+      translate3d(80px, 230px, 0)
+      scale(0.95);
+  }
+}
+
+
+/* Bottom aurora */
+
+@keyframes sigmanixAuroraTwo {
+
+  0% {
+    transform:
+      translate3d(0, 0, 0)
+      scale(1);
+  }
+
+  50% {
+    transform:
+      translate3d(-170px, -100px, 0)
+      scale(1.15);
+  }
+
+  100% {
+    transform:
+      translate3d(-80px, -230px, 0)
+      scale(1.05);
+  }
+}
+
+
+/* Floating glowing dots */
+
+@keyframes sigmanixParticleFloat {
+
+  0% {
+    transform:
+      translate3d(0, 100px, 0)
+      scale(0.6);
+
+    opacity: 0;
+  }
+
+  10% {
+    opacity: 0.8;
+  }
+
+  35% {
+    transform:
+      translate3d(25px, -30vh, 0)
+      scale(1);
+  }
+
+  65% {
+    transform:
+      translate3d(-20px, -65vh, 0)
+      scale(1.15);
+
+    opacity: 1;
+  }
+
+  90% {
+    opacity: 0.5;
+  }
+
+  100% {
+    transform:
+      translate3d(15px, -115vh, 0)
+      scale(0.5);
+
+    opacity: 0;
+  }
+}
+
+
+/* =========================================================
+   SUBTLE SHINE AROUND LOGIN CARD
+   Does NOT change the form itself
+   ========================================================= */
+
+.sigmanix-login-bg > .relative {
+  box-shadow:
+    0 30px 80px rgba(0, 20, 80, 0.32),
+    0 0 60px rgba(56, 189, 248, 0.13);
+}
+
+
+/* =========================================================
+   MOBILE OPTIMIZATION
+   ========================================================= */
+
+@media (max-width: 640px) {
+
+  .sigmanix-login-bg::before {
+    width: 500px;
+    height: 500px;
+
+    top: -280px;
+    left: -280px;
+  }
+
+  .sigmanix-login-bg::after {
+    width: 520px;
+    height: 520px;
+
+    right: -300px;
+    bottom: -250px;
+  }
+}
+
+
+/* =========================================================
+   REDUCED MOTION
+   ========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+
+  .sigmanix-login-bg,
+  .sigmanix-login-bg::before,
+  .sigmanix-login-bg::after,
+  .sigmanix-particle {
+    animation: none;
+  }
+}
