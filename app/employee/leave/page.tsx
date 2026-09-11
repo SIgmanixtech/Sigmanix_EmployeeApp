@@ -382,91 +382,148 @@ export default function EmployeeLeavePage() {
   // ============================================================
   // SUBMIT LEAVE REQUEST
   // ============================================================
+   const handleSubmitRequest = async () => {
+  if (!employee) {
+    alert("Employee information is not available.");
+    return;
+  }
 
-  const handleSubmitRequest = async () => {
-    if (!employee) return;
+  if (!form.type) {
+    alert("Please select a leave type.");
+    return;
+  }
 
-    if (!form.type) {
-      alert("Please select a leave type.");
-      return;
-    }
+  if (!form.fromDate || !form.toDate) {
+    alert("Please select the leave dates.");
+    return;
+  }
 
-    if (!form.fromDate || !form.toDate) {
-      alert("Please select the leave dates.");
-      return;
-    }
+  if (new Date(form.toDate) < new Date(form.fromDate)) {
+    alert("To date cannot be before From date.");
+    return;
+  }
 
-    if (new Date(form.toDate) < new Date(form.fromDate)) {
-      alert("To date cannot be before From date.");
-      return;
-    }
+  if (requestedDays <= 0) {
+    alert(
+      "The selected dates contain no working days. Please select different dates."
+    );
+    return;
+  }
 
-    if (requestedDays <= 0) {
+  const selectedType = leaveTypes.find(
+    (type) => type.name === form.type
+  );
+
+  if (!selectedType) {
+    alert("Invalid leave type selected.");
+    return;
+  }
+
+  const balance = getLeaveBalance(selectedType);
+
+  if (requestedDays > balance.remaining) {
+    alert(
+      `You only have ${balance.remaining} ${selectedType.name} day(s) remaining.`
+    );
+    return;
+  }
+
+  setSubmitting(true);
+
+  try {
+    // --------------------------------------------------------
+    // Confirm logged-in user
+    // --------------------------------------------------------
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      console.error("User error:", userError);
+
       alert(
-        "The selected dates contain no working days. Please select different dates."
+        "Your login session has expired. Please login again."
+      );
+
+      window.location.href = "/login";
+      return;
+    }
+
+    // --------------------------------------------------------
+    // Insert leave request
+    // --------------------------------------------------------
+
+    const {
+      data: insertedRequest,
+      error: insertError,
+    } = await supabase
+      .from("leave_requests")
+      .insert({
+        employee_id: employee.id,
+        type: selectedType.name,
+        date: form.fromDate,
+        days: requestedDays,
+        reason: form.reason.trim(),
+        approved_by: null,
+        status: "pending",
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error(
+        "Submit leave request error:",
+        insertError
+      );
+
+      alert(
+        `Unable to submit leave request: ${insertError.message}`
+      );
+
+      return;
+    }
+
+    if (!insertedRequest) {
+      alert(
+        "Leave request could not be created."
       );
       return;
     }
 
-    const selectedType = leaveTypes.find(
-      (type) => type.name === form.type
+    console.log(
+      "Leave request created:",
+      insertedRequest
     );
 
-    if (!selectedType) {
-      alert("Invalid leave type selected.");
-      return;
-    }
+    alert(
+      "Leave request submitted successfully. Waiting for HR approval."
+    );
 
-    const balance = getLeaveBalance(selectedType);
+    setForm({
+      type: "",
+      fromDate: "",
+      toDate: "",
+      reason: "",
+    });
 
-    if (requestedDays > balance.remaining) {
-      alert(
-        `You only have ${balance.remaining} ${selectedType.name} day(s) remaining.`
-      );
-      return;
-    }
+    setShowRequestModal(false);
 
-    setSubmitting(true);
+    await fetchLeaveRequests(employee.id);
+  } catch (error) {
+    console.error(
+      "Unexpected leave request error:",
+      error
+    );
 
-    try {
-      const { error } = await supabase
-        .from("leave_requests")
-        .insert([
-          {
-            employee_id: employee.id,
-            type: selectedType.name,
-            date: form.fromDate,
-            days: requestedDays,
-            reason: form.reason.trim(),
-            approved_by: null,
-            status: "pending",
-          },
-        ]);
-
-      if (error) {
-        console.error("Submit leave error:", error);
-        alert(error.message);
-        return;
-      }
-
-      alert(
-        "Leave request submitted successfully. Waiting for HR approval."
-      );
-
-      setForm({
-        type: "",
-        fromDate: "",
-        toDate: "",
-        reason: "",
-      });
-
-      setShowRequestModal(false);
-
-      await fetchLeaveRequests(employee.id);
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    alert(
+      "Something went wrong while submitting your leave request."
+    );
+  } finally {
+    setSubmitting(false);
+  }
+};
 
   // ============================================================
   // CANCEL REQUEST
@@ -571,7 +628,7 @@ export default function EmployeeLeavePage() {
             PAGE HEADER
         ================================================== */}
 
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-7">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-7">
 
           <div>
             <div className="flex items-center gap-2">

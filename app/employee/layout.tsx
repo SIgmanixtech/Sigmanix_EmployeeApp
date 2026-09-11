@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
+
+import NotificationBell from "@/components/NotificationBell";
 
 import {
   LayoutDashboard,
@@ -13,12 +15,10 @@ import {
   CalendarDays,
   FileText,
   UserCircle,
-  Bell,
   Settings,
   LogOut,
   Menu,
   X,
-  CheckCheck,
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
@@ -28,17 +28,6 @@ type Employee = {
   full_name: string;
   designation: string | null;
   department: string | null;
-};
-
-type Notification = {
-  id: string;
-  employee_id: string;
-  title: string;
-  message: string;
-  type: string;
-  link: string | null;
-  is_read: boolean;
-  created_at: string;
 };
 
 type MenuItem = {
@@ -53,22 +42,16 @@ export default function EmployeeLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-const pathname = usePathname();
+  const pathname = usePathname();
 
-const isChangePasswordPage =
-  pathname === "/employee/change-password";
+  const isChangePasswordPage =
+    pathname === "/employee/change-password";
 
   const [employee, setEmployee] =
     useState<Employee | null>(null);
 
   const [menuOpen, setMenuOpen] =
     useState(false);
-
-  const [notificationOpen, setNotificationOpen] =
-    useState(false);
-
-  const [notifications, setNotifications] =
-    useState<Notification[]>([]);
 
   const [loading, setLoading] =
     useState(true);
@@ -118,12 +101,11 @@ const isChangePasswordPage =
       path: "/employee/profile",
       icon: <UserCircle size={19} />,
     },
-
     {
-  label: "Settings",
-  path: "/employee/settings",
-  icon: <Settings size={19} />,
-},
+      label: "Settings",
+      path: "/employee/settings",
+      icon: <Settings size={19} />,
+    },
   ];
 
   // =====================================================
@@ -131,8 +113,12 @@ const isChangePasswordPage =
   // =====================================================
 
   useEffect(() => {
+    let mounted = true;
+
     const loadEmployee = async () => {
       try {
+        setLoading(true);
+
         const {
           data: { user },
           error: userError,
@@ -168,25 +154,44 @@ const isChangePasswordPage =
           return;
         }
 
+        // =================================================
+        // EMPLOYEE ONLY ACCESS
+        // =================================================
+
         if (profile.role !== "employee") {
-          router.replace("/dashboard");
+          await supabase.auth.signOut();
+          router.replace("/login");
           return;
         }
 
+        // =================================================
+        // FORCE PASSWORD CHANGE
+        // =================================================
+
         if (
-  profile.must_change_password === true &&
-  pathname !== "/employee/change-password"
-) {
-  router.replace("/employee/change-password");
-  return;
-}
+          profile.must_change_password === true &&
+          pathname !== "/employee/change-password"
+        ) {
+          router.replace(
+            "/employee/change-password"
+          );
+          return;
+        }
 
         if (!profile.employee_id) {
           console.error(
             "No employee linked to this profile."
           );
+
+          await supabase.auth.signOut();
+
+          router.replace("/login");
           return;
         }
+
+        // =================================================
+        // LOAD EMPLOYEE
+        // =================================================
 
         const {
           data: employeeData,
@@ -207,92 +212,34 @@ const isChangePasswordPage =
           return;
         }
 
-        setEmployee(employeeData);
+        if (!employeeData) {
+          console.error(
+            "Employee record not found."
+          );
+          return;
+        }
+
+        if (mounted) {
+          setEmployee(employeeData);
+        }
       } catch (error) {
         console.error(
           "Employee layout error:",
           error
         );
       } finally {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
 
     loadEmployee();
-  }, [router, pathname]);
-
-  // =====================================================
-  // LOAD NOTIFICATIONS
-  // =====================================================
-
-  const fetchNotifications = async (
-    employeeId: string
-  ) => {
-    const {
-      data,
-      error,
-    } = await supabase
-      .from("notifications")
-      .select(
-        `
-        id,
-        employee_id,
-        title,
-        message,
-        type,
-        link,
-        is_read,
-        created_at
-        `
-      )
-      .eq("employee_id", employeeId)
-      .order("created_at", {
-        ascending: false,
-      })
-      .limit(20);
-
-    if (error) {
-      console.error(
-        "Notification fetch error:",
-        error
-      );
-      return;
-    }
-
-    setNotifications(data || []);
-  };
-
-  // =====================================================
-  // LOAD + REALTIME NOTIFICATIONS
-  // =====================================================
-
-  useEffect(() => {
-    if (!employee?.id) return;
-
-    fetchNotifications(employee.id);
-
-    const channel = supabase
-      .channel(
-        `employee-notifications-${employee.id}`
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "notifications",
-          filter: `employee_id=eq.${employee.id}`,
-        },
-        () => {
-          fetchNotifications(employee.id);
-        }
-      )
-      .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      mounted = false;
     };
-  }, [employee?.id]);
+  }, [router, pathname]);
 
   // =====================================================
   // CLOSE MENU WHEN ROUTE CHANGES
@@ -300,83 +247,7 @@ const isChangePasswordPage =
 
   useEffect(() => {
     setMenuOpen(false);
-    setNotificationOpen(false);
   }, [pathname]);
-
-  // =====================================================
-  // UNREAD COUNT
-  // =====================================================
-
-  const unreadCount = useMemo(() => {
-    return notifications.filter(
-      (item) => !item.is_read
-    ).length;
-  }, [notifications]);
-
-  // =====================================================
-  // MARK ONE AS READ
-  // =====================================================
-
-  const handleNotificationClick = async (
-    notification: Notification
-  ) => {
-    if (!notification.is_read) {
-      const { error } = await supabase
-        .from("notifications")
-        .update({
-          is_read: true,
-        })
-        .eq("id", notification.id);
-
-      if (error) {
-        console.error(
-          "Mark notification read error:",
-          error
-        );
-      }
-    }
-
-    setNotificationOpen(false);
-
-    if (notification.link) {
-      router.push(notification.link);
-    } else {
-      await fetchNotifications(
-        notification.employee_id
-      );
-    }
-  };
-
-  // =====================================================
-  // MARK ALL AS READ
-  // =====================================================
-
-  const markAllAsRead = async () => {
-    if (!employee?.id) return;
-
-    const { error } = await supabase
-      .from("notifications")
-      .update({
-        is_read: true,
-      })
-      .eq("employee_id", employee.id)
-      .eq("is_read", false);
-
-    if (error) {
-      console.error(
-        "Mark all read error:",
-        error
-      );
-      return;
-    }
-
-    setNotifications((prev) =>
-      prev.map((item) => ({
-        ...item,
-        is_read: true,
-      }))
-    );
-  };
 
   // =====================================================
   // LOGOUT
@@ -384,7 +255,6 @@ const isChangePasswordPage =
 
   const handleLogout = async () => {
     setMenuOpen(false);
-    setNotificationOpen(false);
 
     await supabase.auth.signOut();
 
@@ -399,6 +269,7 @@ const isChangePasswordPage =
     path: string
   ) => {
     setMenuOpen(false);
+
     router.push(path);
   };
 
@@ -422,57 +293,34 @@ const isChangePasswordPage =
   };
 
   // =====================================================
-  // DATE
-  // =====================================================
-
-  const formatNotificationTime = (
-    value: string
-  ) => {
-    const date = new Date(value);
-
-    return date.toLocaleString(
-      "en-IN",
-      {
-        day: "2-digit",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-      }
-    );
-  };
-
-  // =====================================================
   // LOADING
   // =====================================================
-// =====================================================
-// LOADING
-// =====================================================
 
-if (loading) {
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#F7F9FC] flex items-center justify-center">
+        <p className="text-sm text-gray-500">
+          Loading employee portal...
+        </p>
+      </div>
+    );
+  }
+
+  // =====================================================
+  // CHANGE PASSWORD PAGE
+  // NO HEADER / NO SIDEBAR
+  // =====================================================
+
+  if (isChangePasswordPage) {
+    return <>{children}</>;
+  }
+
+  // =====================================================
+  // NORMAL EMPLOYEE LAYOUT
+  // =====================================================
+
   return (
-    <div className="min-h-screen bg-[#F7F9FC] flex items-center justify-center">
-      <p className="text-sm text-gray-500">
-        Loading employee portal...
-      </p>
-    </div>
-  );
-}
-
-// =====================================================
-// CHANGE PASSWORD PAGE
-// NO HEADER / NO SIDEBAR
-// =====================================================
-
-if (isChangePasswordPage) {
-  return <>{children}</>;
-}
-
-// =====================================================
-// NORMAL EMPLOYEE LAYOUT
-// =====================================================
-
-return (
-  <div className="min-h-screen bg-[#F7F9FC]">
+    <div className="min-h-screen bg-[#F7F9FC]">
 
       {/* =================================================
           FIXED HEADER
@@ -482,9 +330,13 @@ return (
 
         <div className="h-full px-4 sm:px-6 lg:px-8 flex items-center justify-between">
 
-          {/* LEFT */}
+          {/* =================================================
+              LEFT SIDE
+          ================================================= */}
 
           <div className="flex items-center gap-3">
+
+            {/* MENU BUTTON */}
 
             <button
               type="button"
@@ -496,6 +348,8 @@ return (
             >
               <Menu size={23} />
             </button>
+
+            {/* LOGO */}
 
             <Image
               src="/logo.png"
@@ -509,207 +363,27 @@ return (
 
           </div>
 
-          {/* RIGHT */}
+          {/* =================================================
+              RIGHT SIDE
+          ================================================= */}
 
           <div className="flex items-center gap-1 sm:gap-2">
 
             {/* =================================================
-                BELL
+                REALTIME NOTIFICATION BELL
             ================================================= */}
 
-            <div className="relative">
-{/* 
-              <button
-                type="button"
-                onClick={() =>
-                  setNotificationOpen(
-                    (prev) => !prev
-                  )
-                }
-                title="Notifications"
-                className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center hover:bg-gray-100 transition"
-              >
+            <NotificationBell />
 
-                <Bell
-                  size={19}
-                  className="text-gray-600"
-                />
-
-                {unreadCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white">
-                    {unreadCount > 99
-                      ? "99+"
-                      : unreadCount}
-                  </span>
-                )}
-
-              </button> */}
-
-              {/* =================================================
-                  NOTIFICATION DROPDOWN
-              ================================================= */}
-
-              {notificationOpen && (
-                <div className="absolute right-0 mt-3 w-[360px] max-w-[calc(100vw-24px)] bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden z-[70]">
-
-                  {/* HEADER */}
-
-                  <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-
-                    <div>
-
-                      <h3 className="text-sm font-semibold text-gray-900">
-                        Notifications
-                      </h3>
-
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {unreadCount} unread
-                      </p>
-
-                    </div>
-
-                    {unreadCount > 0 && (
-                      <button
-                        type="button"
-                        onClick={markAllAsRead}
-                        className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700"
-                      >
-                        <CheckCheck
-                          size={15}
-                        />
-
-                        Mark all read
-                      </button>
-                    )}
-
-                  </div>
-
-                  {/* LIST */}
-
-                  <div className="max-h-[420px] overflow-y-auto">
-
-                    {notifications.length === 0 ? (
-
-                      <div className="px-5 py-10 text-center">
-
-                        <Bell
-                          size={26}
-                          className="mx-auto text-gray-300"
-                        />
-
-                        <p className="text-sm font-medium text-gray-700 mt-3">
-                          No notifications
-                        </p>
-
-                        <p className="text-xs text-gray-500 mt-1">
-                          New HRMS updates will appear here.
-                        </p>
-
-                      </div>
-
-                    ) : (
-
-                      notifications.map(
-                        (notification) => (
-                          <button
-                            type="button"
-                            key={
-                              notification.id
-                            }
-                            onClick={() =>
-                              handleNotificationClick(
-                                notification
-                              )
-                            }
-                            className={`w-full text-left px-5 py-4 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 transition ${
-                              !notification.is_read
-                                ? "bg-blue-50/40"
-                                : "bg-white"
-                            }`}
-                          >
-
-                            <div className="flex gap-3">
-
-                              <div className="pt-1">
-
-                                <span
-                                  className={`block w-2.5 h-2.5 rounded-full ${
-                                    !notification.is_read
-                                      ? "bg-blue-600"
-                                      : "bg-gray-300"
-                                  }`}
-                                />
-
-                              </div>
-
-                              <div className="min-w-0 flex-1">
-
-                                <div className="flex items-start justify-between gap-3">
-
-                                  <p
-                                    className={`text-sm ${
-                                      !notification.is_read
-                                        ? "font-semibold text-gray-900"
-                                        : "font-medium text-gray-700"
-                                    }`}
-                                  >
-                                    {
-                                      notification.title
-                                    }
-                                  </p>
-
-                                  <span className="text-[10px] text-gray-400 shrink-0">
-                                    {formatNotificationTime(
-                                      notification.created_at
-                                    )}
-                                  </span>
-
-                                </div>
-
-                                <p className="text-xs text-gray-500 mt-1 leading-5">
-                                  {
-                                    notification.message
-                                  }
-                                </p>
-
-                              </div>
-
-                            </div>
-
-                          </button>
-                        )
-                      )
-
-                    )}
-
-                  </div>
-
-                </div>
-              )}
-
-            </div>
-
-            {/* SETTINGS */}
-
-            {/* <button
-              type="button"
-              onClick={() =>
-                router.push(
-                  "/employee/settings"
-                )
-              }
-              title="Settings"
-              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center hover:bg-gray-100 transition"
-            >
-              <Settings
-                size={19}
-                className="text-gray-600"
-              />
-            </button> */}
+            {/* =================================================
+                DIVIDER
+            ================================================= */}
 
             <div className="hidden sm:block h-8 w-px bg-gray-200 mx-1" />
 
-            {/* USER */}
+            {/* =================================================
+                USER PROFILE
+            ================================================= */}
 
             <button
               type="button"
@@ -745,7 +419,9 @@ return (
 
             </button>
 
-            {/* LOGOUT */}
+            {/* =================================================
+                LOGOUT
+            ================================================= */}
 
             <button
               type="button"
@@ -792,6 +468,10 @@ return (
         }`}
       >
 
+        {/* =================================================
+            SIDEBAR HEADER
+        ================================================= */}
+
         <div className="h-[72px] border-b border-gray-200 flex items-center justify-between px-5">
 
           <Image
@@ -814,6 +494,10 @@ return (
           </button>
 
         </div>
+
+        {/* =================================================
+            MENU ITEMS
+        ================================================= */}
 
         <nav className="p-4 space-y-1 overflow-y-auto h-[calc(100vh-145px)]">
 
@@ -840,13 +524,21 @@ return (
                   }`}
                 >
                   {item.icon}
-                  <span>{item.label}</span>
+
+                  <span>
+                    {item.label}
+                  </span>
+
                 </button>
               );
             }
           )}
 
         </nav>
+
+        {/* =================================================
+            SIDEBAR LOGOUT
+        ================================================= */}
 
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 bg-white">
 
@@ -856,6 +548,7 @@ return (
             className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-600 font-medium text-sm hover:bg-red-50"
           >
             <LogOut size={19} />
+
             Logout
           </button>
 

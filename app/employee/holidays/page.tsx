@@ -3,154 +3,93 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
-  Search,
+  CalendarCheck,
+  Clock3,
+  MapPin,
   Sparkles,
-  CalendarCheck2,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
 
+import { supabase } from "@/lib/supabase";
 
 type Holiday = {
   id: string;
   name: string;
   date: string;
   type: string | null;
-  recurring: boolean | null;
+  recurring: boolean;
   description: string | null;
-  active: boolean | null;
+  active: boolean;
 };
 
 export default function EmployeeHolidaysPage() {
-  const router = useRouter();
-
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
-  // =====================================================
-  // AUTH + FETCH HOLIDAYS
-  // =====================================================
+  // ============================================================
+  // LOAD HOLIDAYS
+  // ============================================================
+
+  const fetchHolidays = async () => {
+    try {
+      setLoading(true);
+      setErrorMessage("");
+
+      const { data, error } = await supabase
+        .from("holidays")
+        .select(
+          `
+          id,
+          name,
+          date,
+          type,
+          recurring,
+          description,
+          active
+        `
+        )
+        .eq("active", true)
+        .order("date", {
+          ascending: true,
+        });
+
+      if (error) {
+        console.error("Holiday fetch error:", error);
+
+        setErrorMessage(
+          "Unable to load company holidays."
+        );
+
+        return;
+      }
+
+      setHolidays((data || []) as Holiday[]);
+    } catch (error) {
+      console.error("Holiday loading error:", error);
+
+      setErrorMessage(
+        "Unable to load company holidays."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ============================================================
+  // INITIAL LOAD
+  // ============================================================
 
   useEffect(() => {
-    const fetchHolidays = async () => {
-      try {
-        // ---------------------------------------------
-        // 1. GET LOGGED-IN USER
-        // ---------------------------------------------
-
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
-
-        if (userError || !user) {
-          router.replace("/login");
-          return;
-        }
-
-        // ---------------------------------------------
-        // 2. GET PROFILE
-        // ---------------------------------------------
-
-        const {
-          data: profile,
-          error: profileError,
-        } = await supabase
-          .from("profiles")
-          .select("role, must_change_password")
-          .eq("id", user.id)
-          .maybeSingle();
-
-        if (profileError) {
-          console.error(
-            "Profile error:",
-            profileError
-          );
-          return;
-        }
-
-        if (!profile) {
-          await supabase.auth.signOut();
-          router.replace("/login");
-          return;
-        }
-
-        // ---------------------------------------------
-        // 3. EMPLOYEE ONLY
-        // ---------------------------------------------
-
-        if (profile.role !== "employee") {
-          router.replace("/dashboard");
-          return;
-        }
-
-        // ---------------------------------------------
-        // 4. FORCE PASSWORD CHANGE
-        // ---------------------------------------------
-
-        if (
-          profile.must_change_password === true
-        ) {
-          router.replace("/change-password");
-          return;
-        }
-
-        // ---------------------------------------------
-        // 5. FETCH HOLIDAYS
-        // ---------------------------------------------
-
-        const {
-          data,
-          error,
-        } = await supabase
-          .from("holidays")
-          .select(
-            `
-            id,
-            name,
-            date,
-            type,
-            recurring,
-            description,
-            active
-            `
-          )
-          .eq("active", true)
-          .order("date", {
-            ascending: true,
-          });
-
-        if (error) {
-          console.error(
-            "Holiday fetch error:",
-            error
-          );
-
-          return;
-        }
-
-        setHolidays(
-          data || []
-        );
-      } catch (error) {
-        console.error(
-          "Holidays page error:",
-          error
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchHolidays();
+  }, []);
 
-    // ---------------------------------------------
-    // REALTIME HOLIDAY UPDATES
-    // ---------------------------------------------
+  // ============================================================
+  // REALTIME
+  // ============================================================
 
+  useEffect(() => {
     const channel = supabase
-      .channel("employee-holidays")
+      .channel("employee-company-holidays")
       .on(
         "postgres_changes",
         {
@@ -167,432 +106,485 @@ export default function EmployeeHolidaysPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [router]);
+  }, []);
 
-  // =====================================================
-  // FILTER
-  // =====================================================
-
-  const filteredHolidays = useMemo(() => {
-    const value =
-      search.trim().toLowerCase();
-
-    if (!value) {
-      return holidays;
-    }
-
-    return holidays.filter(
-      (holiday) =>
-        `${holiday.name} ${holiday.type || ""} ${holiday.description || ""}`
-          .toLowerCase()
-          .includes(value)
-    );
-  }, [
-    holidays,
-    search,
-  ]);
-
-  // =====================================================
-  // DATE FORMAT
-  // =====================================================
-
-  const formatDate = (
-    value: string
-  ) => {
-    const date =
-      new Date(
-        `${value}T00:00:00`
-      );
-
-    if (
-      Number.isNaN(
-        date.getTime()
-      )
-    ) {
-      return value;
-    }
-
-    return date.toLocaleDateString(
-      "en-IN",
-      {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      }
-    );
-  };
-
-  const getDayName = (
-    value: string
-  ) => {
-    const date =
-      new Date(
-        `${value}T00:00:00`
-      );
-
-    if (
-      Number.isNaN(
-        date.getTime()
-      )
-    ) {
-      return "-";
-    }
-
-    return date.toLocaleDateString(
-      "en-IN",
-      {
-        weekday: "long",
-      }
-    );
-  };
-
-  // =====================================================
+  // ============================================================
   // CURRENT YEAR
-  // =====================================================
+  // ============================================================
 
-  const currentYear =
-    new Date().getFullYear();
+  const currentYear = new Date().getFullYear();
 
-  // =====================================================
-  // THIS YEAR HOLIDAYS
-  // =====================================================
+  const selectedYear =
+    holidays.length > 0
+      ? new Date(
+          `${holidays[0].date}T00:00:00`
+        ).getFullYear()
+      : currentYear;
 
-  const thisYearCount = useMemo(() => {
-    return holidays.filter(
-      (holiday) =>
-        new Date(
-          `${holiday.date}T00:00:00`
-        ).getFullYear() ===
-        currentYear
-    ).length;
-  }, [
-    holidays,
-    currentYear,
-  ]);
+  // ============================================================
+  // YEAR HOLIDAYS
+  // ============================================================
 
-  // =====================================================
-  // NEXT HOLIDAY
-  // =====================================================
+  const yearHolidays = useMemo(() => {
+    return holidays.filter((holiday) => {
+      const holidayYear = new Date(
+        `${holiday.date}T00:00:00`
+      ).getFullYear();
 
-  const nextHoliday = useMemo(() => {
-    const today =
-      new Date();
+      return holidayYear === selectedYear;
+    });
+  }, [holidays, selectedYear]);
 
-    today.setHours(
-      0,
-      0,
-      0,
-      0
+  // ============================================================
+  // UPCOMING HOLIDAYS
+  // ============================================================
+
+  const upcomingCount = useMemo(() => {
+    const today = new Date();
+
+    today.setHours(0, 0, 0, 0);
+
+    return yearHolidays.filter((holiday) => {
+      const holidayDate = new Date(
+        `${holiday.date}T00:00:00`
+      );
+
+      return holidayDate >= today;
+    }).length;
+  }, [yearHolidays]);
+
+  // ============================================================
+  // FORMAT DATE
+  // ============================================================
+
+  const formatDate = (date: string) => {
+    return new Date(
+      `${date}T00:00:00`
+    ).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  // ============================================================
+  // GET DAY
+  // ============================================================
+
+  const getDay = (date: string) => {
+    return new Date(
+      `${date}T00:00:00`
+    ).toLocaleDateString("en-IN", {
+      weekday: "long",
+    });
+  };
+
+  // ============================================================
+  // GET MONTH
+  // ============================================================
+
+  const getMonth = (date: string) => {
+    return new Date(
+      `${date}T00:00:00`
+    )
+      .toLocaleDateString("en-IN", {
+        month: "short",
+      })
+      .toUpperCase();
+  };
+
+  // ============================================================
+  // GET DATE NUMBER
+  // ============================================================
+
+  const getDateNumber = (date: string) => {
+    return new Date(
+      `${date}T00:00:00`
+    )
+      .getDate()
+      .toString()
+      .padStart(2, "0");
+  };
+
+  // ============================================================
+  // CHECK UPCOMING
+  // ============================================================
+
+  const isUpcoming = (date: string) => {
+    const today = new Date();
+
+    today.setHours(0, 0, 0, 0);
+
+    const holidayDate = new Date(
+      `${date}T00:00:00`
     );
 
-    return holidays.find(
-      (holiday) => {
-        const holidayDate =
-          new Date(
-            `${holiday.date}T00:00:00`
-          );
-
-        return holidayDate >= today;
-      }
-    );
-  }, [holidays]);
-
-  // =====================================================
-  // LOADING
-  // =====================================================
-
-  if (loading) {
-    return (
-      <div className="min-h-[calc(100vh-72px)] flex items-center justify-center">
-
-        <p className="text-sm text-gray-500">
-          Loading holidays...
-        </p>
-
-      </div>
-    );
-  }
+    return holidayDate >= today;
+  };
 
   return (
-    <main className="w-full max-w-[1650px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
+    <main className="min-h-screen bg-[#f7f9fc] px-4 py-6 sm:px-6 lg:px-8">
 
-      {/* =================================================
-          PAGE HEADER
-      ================================================= */}
+      <div className="max-w-6xl mx-auto">
 
-      <div className="mb-7">
+        {/* =====================================================
+            PAGE HEADER
+        ===================================================== */}
 
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">
-          Company Holidays
-        </h1>
+        <div className="mb-6">
 
-        <p className="text-sm text-gray-500 mt-1">
-          View upcoming company holidays and important dates
-        </p>
+          <div className="flex items-center gap-3">
 
-      </div>
+            <div className="w-11 h-11 rounded-xl bg-blue-100 flex items-center justify-center">
 
-      {/* =================================================
-          SUMMARY CARDS
-      ================================================= */}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-
-        {/* THIS YEAR */}
-
-        <div className="bg-white border border-gray-200 rounded-2xl p-5">
-
-          <div className="flex items-center gap-3 mb-4">
-
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-
-              <CalendarCheck2
-                size={19}
+              <CalendarDays
+                size={22}
+                className="text-[#034EA2]"
               />
 
             </div>
 
-            <p className="text-sm font-medium text-gray-600">
-              Holidays This Year
-            </p>
+            <div>
 
-          </div>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
+                Company Holidays
+              </h1>
 
-          <p className="text-3xl font-bold text-gray-900">
-            {thisYearCount}
-          </p>
-
-          <p className="text-xs text-gray-500 mt-2">
-            Active company holidays in {currentYear}
-          </p>
-
-        </div>
-
-        {/* NEXT HOLIDAY */}
-
-        <div className="bg-white border border-gray-200 rounded-2xl p-5">
-
-          <div className="flex items-center gap-3 mb-4">
-
-            <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-
-              <Sparkles
-                size={19}
-              />
+              <p className="text-sm text-gray-500 mt-1">
+                SIGMANIX Tech Solutions holiday calendar
+              </p>
 
             </div>
 
-            <p className="text-sm font-medium text-gray-600">
-              Next Holiday
+          </div>
+
+        </div>
+
+        {/* =====================================================
+            SUMMARY CARDS
+        ===================================================== */}
+
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-6">
+
+          {/* TOTAL */}
+
+          <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-5 shadow-sm">
+
+            <div className="flex items-center justify-between">
+
+              <div>
+
+                <p className="text-xs sm:text-sm text-gray-500">
+                  Total Holidays
+                </p>
+
+                <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-2">
+                  {yearHolidays.length}
+                </p>
+
+              </div>
+
+              <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
+
+                <CalendarCheck
+                  size={20}
+                  className="text-blue-600"
+                />
+
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* UPCOMING */}
+
+          <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-5 shadow-sm">
+
+            <div className="flex items-center justify-between">
+
+              <div>
+
+                <p className="text-xs sm:text-sm text-gray-500">
+                  Upcoming
+                </p>
+
+                <p className="text-2xl sm:text-3xl font-bold text-orange-600 mt-2">
+                  {upcomingCount}
+                </p>
+
+              </div>
+
+              <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center">
+
+                <Clock3
+                  size={20}
+                  className="text-orange-600"
+                />
+
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* YEAR */}
+
+          <div className="col-span-2 lg:col-span-1 bg-white border border-gray-200 rounded-2xl p-4 sm:p-5 shadow-sm">
+
+            <div className="flex items-center justify-between">
+
+              <div>
+
+                <p className="text-xs sm:text-sm text-gray-500">
+                  Holiday Calendar
+                </p>
+
+                <p className="text-2xl sm:text-3xl font-bold text-[#034EA2] mt-2">
+                  {selectedYear}
+                </p>
+
+              </div>
+
+              <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center">
+
+                <Sparkles
+                  size={20}
+                  className="text-purple-600"
+                />
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* =====================================================
+            HOLIDAY LIST
+        ===================================================== */}
+
+        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+
+          <div className="px-4 sm:px-6 py-4 border-b border-gray-100">
+
+            <h2 className="text-base sm:text-lg font-semibold text-gray-900">
+              Holiday Calendar {selectedYear}
+            </h2>
+
+            <p className="text-xs sm:text-sm text-gray-500 mt-1">
+              Official company holidays for employees
             </p>
 
           </div>
 
-          <p className="text-xl sm:text-2xl font-bold text-gray-900">
-            {nextHoliday
-              ? nextHoliday.name
-              : "No Upcoming Holiday"}
-          </p>
+          {/* LOADING */}
 
-          <p className="text-xs text-gray-500 mt-2">
-            {nextHoliday
-              ? `${formatDate(
-                  nextHoliday.date
-                )} · ${getDayName(
-                  nextHoliday.date
-                )}`
-              : "No upcoming holiday found"}
-          </p>
+          {loading && (
 
-        </div>
+            <div className="py-16 flex flex-col items-center justify-center">
 
-      </div>
+              <div className="w-8 h-8 border-2 border-gray-200 border-t-[#034EA2] rounded-full animate-spin" />
 
-      {/* =================================================
-          SEARCH
-      ================================================= */}
+              <p className="text-sm text-gray-500 mt-3">
+                Loading holidays...
+              </p>
 
-      <div className="relative max-w-md mb-6">
+            </div>
 
-        <Search
-          size={18}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-        />
+          )}
 
-        <input
-          type="text"
-          value={search}
-          onChange={(e) =>
-            setSearch(
-              e.target.value
-            )
-          }
-          placeholder="Search holidays..."
-          className="w-full border border-gray-300 rounded-lg pl-10 pr-4 py-2.5 text-sm text-black outline-none focus:ring-2 focus:ring-blue-500"
-        />
+          {/* ERROR */}
 
-      </div>
+          {!loading && errorMessage && (
 
-      {/* =================================================
-          HOLIDAY TABLE
-      ================================================= */}
+            <div className="py-12 px-4 text-center">
 
-      <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+              <p className="text-sm text-red-600">
+                {errorMessage}
+              </p>
 
-        <div className="overflow-x-auto">
+            </div>
 
-          <table className="w-full min-w-[850px] text-sm">
+          )}
 
-            <thead className="bg-gray-50 border-b border-gray-200">
+          {/* NO HOLIDAYS */}
 
-              <tr className="text-left text-gray-500">
+          {!loading &&
+            !errorMessage &&
+            yearHolidays.length === 0 && (
 
-                <th className="px-5 py-3 font-medium">
-                  Holiday
-                </th>
+              <div className="py-16 text-center">
 
-                <th className="px-5 py-3 font-medium">
-                  Date
-                </th>
+                <CalendarDays
+                  size={36}
+                  className="text-gray-300 mx-auto"
+                />
 
-                <th className="px-5 py-3 font-medium">
-                  Day
-                </th>
+                <p className="text-sm font-medium text-gray-700 mt-3">
+                  No company holidays available
+                </p>
 
-                <th className="px-5 py-3 font-medium">
-                  Type
-                </th>
+              </div>
 
-                <th className="px-5 py-3 font-medium">
-                  Description
-                </th>
+            )}
 
-              </tr>
+          {/* HOLIDAY CARDS */}
 
-            </thead>
+          {!loading &&
+            !errorMessage &&
+            yearHolidays.length > 0 && (
 
-            <tbody>
+              <div className="divide-y divide-gray-100">
 
-              {filteredHolidays.length === 0 ? (
+                {yearHolidays.map(
+                  (holiday) => {
 
-                <tr>
+                    const upcoming =
+                      isUpcoming(holiday.date);
 
-                  <td
-                    colSpan={5}
-                    className="px-5 py-12 text-center"
-                  >
+                    return (
+                      <div
+                        key={holiday.id}
+                        className="px-4 sm:px-6 py-4 hover:bg-gray-50 transition"
+                      >
 
-                    <div className="flex flex-col items-center">
+                        <div className="flex items-start gap-4">
 
-                      <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center">
+                          {/* DATE BOX */}
 
-                        <CalendarDays
-                          size={22}
-                          className="text-gray-400"
-                        />
+                          <div
+                            className={`w-14 sm:w-16 shrink-0 rounded-xl overflow-hidden border ${
+                              upcoming
+                                ? "border-blue-200"
+                                : "border-gray-200"
+                            }`}
+                          >
 
-                      </div>
+                            <div
+                              className={`text-[10px] sm:text-xs font-bold text-center py-1 ${
+                                upcoming
+                                  ? "bg-[#034EA2] text-white"
+                                  : "bg-gray-100 text-gray-500"
+                              }`}
+                            >
+                              {getMonth(
+                                holiday.date
+                              )}
+                            </div>
 
-                      <p className="text-sm font-medium text-gray-700 mt-4">
-                        No holidays found
-                      </p>
+                            <div className="bg-white text-center py-2">
 
-                      <p className="text-xs text-gray-500 mt-1">
-                        Active company holidays will appear here.
-                      </p>
+                              <span className="text-xl sm:text-2xl font-bold text-gray-900">
+                                {getDateNumber(
+                                  holiday.date
+                                )}
+                              </span>
 
-                    </div>
-
-                  </td>
-
-                </tr>
-
-              ) : (
-
-                filteredHolidays.map(
-                  (holiday) => (
-
-                    <tr
-                      key={holiday.id}
-                      className="border-b border-gray-100 last:border-0 hover:bg-gray-50/60 transition"
-                    >
-
-                      {/* NAME */}
-
-                      <td className="px-5 py-4">
-
-                        <div className="flex items-center gap-3">
-
-                          <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-
-                            <CalendarDays
-                              size={17}
-                            />
+                            </div>
 
                           </div>
 
-                          <div>
+                          {/* CONTENT */}
 
-                            <p className="font-medium text-gray-900">
-                              {holiday.name}
-                            </p>
+                          <div className="flex-1 min-w-0">
 
-                            {holiday.recurring && (
-                              <p className="text-xs text-gray-400 mt-0.5">
-                                Recurring Holiday
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3">
+
+                              <div>
+
+                                <h3 className="text-sm sm:text-base font-semibold text-gray-900">
+                                  {holiday.name}
+                                </h3>
+
+                                <p className="text-xs sm:text-sm text-gray-500 mt-1">
+                                  {getDay(
+                                    holiday.date
+                                  )}
+                                  {" · "}
+                                  {formatDate(
+                                    holiday.date
+                                  )}
+                                </p>
+
+                              </div>
+
+                              <div>
+
+                                {holiday.type && (
+
+                                  <span
+                                    className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-medium ${
+                                      holiday.type ===
+                                      "Tentative Holiday"
+                                        ? "bg-orange-50 text-orange-700 border border-orange-200"
+                                        : holiday.type ===
+                                          "National Holiday"
+                                        ? "bg-green-50 text-green-700 border border-green-200"
+                                        : "bg-blue-50 text-blue-700 border border-blue-200"
+                                    }`}
+                                  >
+                                    {holiday.type}
+                                  </span>
+
+                                )}
+
+                              </div>
+
+                            </div>
+
+                            {holiday.description && (
+
+                              <p className="text-xs sm:text-sm text-gray-500 mt-2 leading-5">
+                                {holiday.description}
                               </p>
+
                             )}
 
                           </div>
 
                         </div>
 
-                      </td>
+                      </div>
+                    );
+                  }
+                )}
 
-                      {/* DATE */}
+              </div>
 
-                      <td className="px-5 py-4 text-gray-700">
-                        {formatDate(
-                          holiday.date
-                        )}
-                      </td>
+            )}
 
-                      {/* DAY */}
+        </div>
 
-                      <td className="px-5 py-4 text-gray-600">
-                        {getDayName(
-                          holiday.date
-                        )}
-                      </td>
+        {/* =====================================================
+            COMPANY POLICY
+        ===================================================== */}
 
-                      {/* TYPE */}
+        <div className="mt-6 bg-blue-50 border border-blue-100 rounded-2xl p-4 sm:p-5">
 
-                      <td className="px-5 py-4">
+          <div className="flex items-start gap-3">
 
-                        <span className="inline-flex rounded-full bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-700">
-                          {holiday.type ||
-                            "Holiday"}
-                        </span>
+            <MapPin
+              size={19}
+              className="text-[#034EA2] shrink-0 mt-0.5"
+            />
 
-                      </td>
+            <div>
 
-                      {/* DESCRIPTION */}
+              <h3 className="text-sm font-semibold text-gray-900">
+                Holiday Information
+              </h3>
 
-                      <td className="px-5 py-4 text-gray-600 max-w-[360px]">
-                        {holiday.description ||
-                          "-"}
-                      </td>
+              <p className="text-xs sm:text-sm text-gray-600 mt-1 leading-5">
+                Holidays are observed according to company policy.
+                Tentative holidays may change based on official
+                announcements. Any updates will be communicated by HR.
+              </p>
 
-                    </tr>
+            </div>
 
-                  )
-                )
-
-              )}
-
-            </tbody>
-
-          </table>
+          </div>
 
         </div>
 
