@@ -51,7 +51,7 @@ export default function TeamsDirectoryPage() {
 
       <div className="flex items-center gap-3 mb-5 flex-wrap">
         <div className="relative flex-1 min-w-[220px] max-w-md">
-          <Search size={16} className="absolute left-105 top-1/2 -translate-y-1/2 text-gray-500" />
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
           <input
             type="text"
             value={search}
